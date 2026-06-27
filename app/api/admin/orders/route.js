@@ -1,13 +1,14 @@
 // GET /api/admin/orders?status=pending — the fulfilment queue (all customers).
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
-import { getAdminFromRequest } from "@/lib/auth";
+import { getAdminFromRequest, hasPermission } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(request) {
   const admin = await getAdminFromRequest(request);
   if (!admin) return NextResponse.json({ success: false, error: "Admin access required." }, { status: 403 });
+  if (!hasPermission(admin, "orders")) return NextResponse.json({ success: false, error: "You don\u2019t have permission for this." }, { status: 403 });
   try {
     const url = new URL(request.url);
     const status = url.searchParams.get("status") || "pending";
