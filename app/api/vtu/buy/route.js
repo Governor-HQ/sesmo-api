@@ -7,7 +7,8 @@ import { getUserFromRequest } from "@/lib/auth";
 import { buy, queryTransaction, findDataPlan, sellingKoboForData, normalizePhone, isValidPhone, AIRTIME_NETWORKS } from "@/lib/sabvtu";
 
 export const runtime = "nodejs";
-const newRef = () => "SES-VTU-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+// SABVTU rejects references containing hyphens, so keep this strictly alphanumeric.
+const newRef = () => "SESVTU" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 8).toUpperCase();
 
 export async function POST(request) {
   const user = getUserFromRequest(request);
