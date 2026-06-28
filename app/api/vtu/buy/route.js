@@ -69,16 +69,18 @@ export async function POST(request) {
     const providerRef = (resp && resp.reference) || null;
     if (providerRef) await pool.query("update vtu_orders set provider_reference=$2 where reference=$1", [reference, providerRef]);
 
-    if (code === "800") {
-      await pool.query("select vtu_refund($1,$2,$3)", [reference, "failed", (resp && resp.response) || "Order failed"]);
-      return NextResponse.json({ success: true, status: "failed", refunded: true, reference, message: "That order failed and your money was refunded." });
-    }
     if (code === "200") {
       await pool.query("select vtu_complete($1,$2,$3)", [reference, "success", (resp && resp.response) || "Delivered"]);
       return NextResponse.json({ success: true, status: "completed", reference, message: (resp && resp.response) || "Delivered." });
     }
-    // 400 pending (the usual case) — webhook finalizes
-    return NextResponse.json({ success: true, status: "processing", reference, message: (resp && resp.response) || "Order placed — delivering now." });
+    if (code === "400") {
+      // pending (the usual case) — webhook finalizes
+      return NextResponse.json({ success: true, status: "processing", reference, message: (resp && resp.response) || "Order placed — delivering now." });
+    }
+    // 800 failed, 900 reversed, OR any error/unknown response -> refund and surface the provider's exact reason
+    const reason = (resp && resp.response) ? String(resp.response) : ("Provider rejected the order" + (code ? " (code " + code + ")" : ""));
+    await pool.query("select vtu_refund($1,$2,$3)", [reference, (resp && resp.status) || "failed", reason]);
+    return NextResponse.json({ success: true, status: "failed", refunded: true, reference, message: reason + " — your money was refunded." });
   } catch (e) {
     console.error("vtu buy error:", e);
     return NextResponse.json({ success: false, error: "Could not complete the purchase." }, { status: 500 });
