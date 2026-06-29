@@ -11,7 +11,7 @@ export async function PATCH(request, { params }) {
     if (b.price_kobo != null) {
       const k = Math.trunc(Number(b.price_kobo));
       if (!Number.isFinite(k) || k <= 0) return NextResponse.json({ success: false, error: "Price must be greater than zero." }, { status: 400 });
-      await pool.query("update service_products set price_kobo = $2 where id = $1", [params.id, k]);
+      await pool.query("update service_products set price = $2 where id = $1", [params.id, k]);
     }
     if (typeof b.active === "boolean") await pool.query("update service_products set active = $2 where id = $1", [params.id, b.active]);
     return NextResponse.json({ success: true });

@@ -14,7 +14,7 @@ export async function GET(request) {
 
   try {
     const { rows: products } = await pool.query(
-      "select id, category, provider, name, price_kobo, requires_smartcard, active from service_products order by category, provider, sort, name"
+      "select id, category, provider, name, price as price_kobo, requires_smartcard, active from service_products order by category, provider, sort, name"
     );
     const cfg = await loadPricingConfig();
 
