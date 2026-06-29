@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { hashPassword, signToken } from "@/lib/auth";
+import { rateLimit, clientId } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,8 @@ export async function POST(request) {
     const password = String(body.password || "");
     const fullName = String(body.full_name || "").trim();
     const phone = String(body.phone || "").trim();
+    const rl = await rateLimit("register", clientId(request), 5, 600);
+    if (!rl.ok) return NextResponse.json({ success: false, error: "Too many attempts. Try again later." }, { status: 429 });
 
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return NextResponse.json({ success: false, error: "Enter a valid email." }, { status: 400 });
     if (password.length < 8) return NextResponse.json({ success: false, error: "Password must be at least 8 characters." }, { status: 400 });

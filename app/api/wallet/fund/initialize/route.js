@@ -7,6 +7,7 @@ import pool from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
 import { ensureWallet } from "@/lib/wallet";
 import { initializeTransaction } from "@/lib/paystack";
+import { rateLimit, clientId } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,8 @@ export async function POST(request) {
   const user = getUserFromRequest(request);
   if (!user) return NextResponse.json({ success: false, error: "Please log in." }, { status: 401 });
   try {
+    const rl = await rateLimit("fund", user.userId, 20, 300);
+    if (!rl.ok) return NextResponse.json({ success: false, error: "Too many requests. Slow down a moment." }, { status: 429 });
     const body = await request.json().catch(() => ({}));
     const naira = Number(body.amount);
     if (!Number.isFinite(naira) || naira < 100 || naira > 1000000) {

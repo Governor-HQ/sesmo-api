@@ -4,7 +4,9 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
-import { buy, queryTransaction, findDataPlan, sellingKoboForData, normalizePhone, isValidPhone, AIRTIME_NETWORKS } from "@/lib/sabvtu";
+import { rateLimit, clientId } from "@/lib/ratelimit";
+import { buy, queryTransaction, findDataPlan, detectNetwork, normalizePhone, isValidPhone, AIRTIME_NETWORKS } from "@/lib/sabvtu";
+import { loadPricingConfig, resolvePriceKobo } from "@/lib/pricing";
 
 export const runtime = "nodejs";
 // SABVTU rejects references containing hyphens, so keep this strictly alphanumeric.
@@ -14,6 +16,8 @@ export async function POST(request) {
   const user = getUserFromRequest(request);
   if (!user) return NextResponse.json({ success: false, error: "Please log in." }, { status: 401 });
   try {
+    const rl = await rateLimit("vtubuy", user.userId, 20, 300);
+    if (!rl.ok) return NextResponse.json({ success: false, error: "Too many requests. Slow down a moment." }, { status: 429 });
     const b = await request.json().catch(() => ({}));
     const category = b.category === "airtime" ? "airtime" : b.category === "data" ? "data" : null;
     const phone = normalizePhone(b.phone);
@@ -32,10 +36,10 @@ export async function POST(request) {
     } else {
       const plan = await findDataPlan(planId);
       if (!plan) return NextResponse.json({ success: false, error: "That data plan is unavailable." }, { status: 400 });
-      sellKobo = sellingKoboForData(plan.amount);
-      if (!sellKobo) return NextResponse.json({ success: false, error: "That data plan is unavailable." }, { status: 400 });
-      const { detectNetwork } = await import("@/lib/sabvtu");
       network = detectNetwork(plan.name); planName = plan.name;
+      const cfg = await loadPricingConfig();
+      sellKobo = resolvePriceKobo(String(planId), network, plan.amount, cfg);
+      if (!sellKobo) return NextResponse.json({ success: false, error: "That data plan is unavailable." }, { status: 400 });
     }
 
     const reference = newRef();
@@ -80,8 +84,9 @@ export async function POST(request) {
     }
     // 800 failed, 900 reversed, OR any error/unknown response -> refund and surface the provider's exact reason
     const reason = (resp && resp.response) ? String(resp.response) : ("Provider rejected the order" + (code ? " (code " + code + ")" : ""));
+    console.error("vtu buy failed:", reference, reason); // raw reason -> server logs / admin
     await pool.query("select vtu_refund($1,$2,$3)", [reference, (resp && resp.status) || "failed", reason]);
-    return NextResponse.json({ success: true, status: "failed", refunded: true, reference, message: reason + " — your money was refunded." });
+    return NextResponse.json({ success: true, status: "failed", refunded: true, reference, message: "This order couldn't be completed, so your money was refunded." });
   } catch (e) {
     console.error("vtu buy error:", e);
     return NextResponse.json({ success: false, error: "Could not complete the purchase." }, { status: 500 });

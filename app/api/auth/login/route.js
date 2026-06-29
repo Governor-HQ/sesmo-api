@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { verifyPassword, signToken } from "@/lib/auth";
+import { rateLimit, clientId } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,8 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
+    const rl = await rateLimit("login", clientId(request, email), 8, 300);
+    if (!rl.ok) return NextResponse.json({ success: false, error: "Too many login attempts. Try again in a few minutes." }, { status: 429 });
     if (!email || !password) return NextResponse.json({ success: false, error: "Enter your email and password." }, { status: 400 });
 
     const { rows } = await pool.query(
